@@ -12,12 +12,19 @@ const photo = computed(() => props.photos[props.index])
 const flipped = ref(false)
 const enlarged = ref(false)
 const available = ref(true)
+const thumbnailFailed = ref(false)
 const offset = ref(0)
 const slide = ref<'forward' | 'backward'>('forward')
 const photoButton = ref<HTMLButtonElement>()
 const base = import.meta.env.BASE_URL
 const title = computed(() => albumTitles[props.category])
-const src = computed(() => photo.value?.image.startsWith('data:') ? photo.value.image : base + photo.value?.image)
+const fullSrc = computed(() => photoUrl(photo.value?.image ?? ''))
+const pageSrc = computed(() => {
+  if (thumbnailFailed.value || !photo.value?.thumbnail) {
+    return fullSrc.value
+  }
+  return photoUrl(photo.value.thumbnail)
+})
 const hasNote = computed(() => Boolean(photo.value?.note?.trim()))
 const canPage = computed(() => props.photos.length > 1)
 const sticker = computed(() => {
@@ -38,6 +45,7 @@ watch([() => props.category, () => photo.value?.id], () => {
   flipped.value = false
   enlarged.value = false
   available.value = true
+  thumbnailFailed.value = false
   offset.value = 0
   touch = undefined
 })
@@ -156,6 +164,60 @@ async function closeFullscreen() {
   await nextTick()
   photoButton.value?.focus({ preventScroll: true })
 }
+
+/**
+ * 将照片路径解析为当前站点的地址，开发示例保留数据地址
+ *
+ * @author 何齐龙
+ * @date 2026/11/24 22:28
+ * @param path 相册清单中的原图或缩略图地址
+ * @return 可交给图片元素的地址
+ */
+function photoUrl(path: string) {
+  return path.startsWith('data:') ? path : base + path
+}
+
+/**
+ * 当前照片显示后，低优先级预取相邻照片的缩略图
+ *
+ * @author 何齐龙
+ * @date 2026/11/24 22:28
+ * @param event 当前相纸的图片加载事件
+ */
+function preloadAdjacentThumbnails(event: Event) {
+  const image = event.currentTarget as HTMLImageElement
+  if (image.dataset.photoId !== photo.value?.id) {
+    return
+  }
+
+  for (const index of [props.index + 1, props.index - 1]) {
+    const path = props.photos[index]?.thumbnail
+    if (path && !path.startsWith('data:')) {
+      const adjacent = new Image()
+      adjacent.fetchPriority = 'low'
+      adjacent.src = photoUrl(path)
+    }
+  }
+}
+
+/**
+ * 缩略图失败时改用大图，两者都失败才显示缺图提示
+ *
+ * @author 何齐龙
+ * @date 2026/11/24 22:28
+ * @param event 加载失败的图片事件
+ */
+function handlePageImageError(event: Event) {
+  const image = event.currentTarget as HTMLImageElement
+  if (image.dataset.photoId !== photo.value?.id) {
+    return
+  }
+  if (pageSrc.value !== fullSrc.value) {
+    thumbnailFailed.value = true
+  } else {
+    available.value = false
+  }
+}
 </script>
 
 <template>
@@ -183,8 +245,9 @@ async function closeFullscreen() {
                       <div class="photo-face front" :inert="flipped || undefined">
                         <button v-if="available" ref="photoButton" class="view-photo" type="button"
                           aria-label="全屏查看照片" :tabindex="flipped ? -1 : 0" @click="enlarged = true">
-                          <img :src="src" :alt="photo.title || title" :width="photo.width" :height="photo.height"
-                            draggable="false" @error="available = false" />
+                          <img :src="pageSrc" :alt="photo.title || title" :width="photo.width" :height="photo.height"
+                            :data-photo-id="photo.id" decoding="async" draggable="false"
+                            @load="preloadAdjacentThumbnails" @error="handlePageImageError" />
                         </button>
                         <p v-else class="photo-error">这张照片暂时无法显示。</p>
                       </div>
@@ -266,7 +329,8 @@ async function closeFullscreen() {
       </footer>
     </div>
 
-    <AlbumFullscreen v-if="photo && enlarged" :src="src" :label="photo.title || title"
+    <AlbumFullscreen v-if="photo && enlarged" :key="photo.id" :src="fullSrc" :preview="pageSrc"
+      :label="photo.title || title"
       :width="photo.width" :height="photo.height" @close="closeFullscreen" />
   </section>
 </template>

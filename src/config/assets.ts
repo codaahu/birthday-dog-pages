@@ -10,7 +10,7 @@ export const assets: {
   // 网页版使用已确认可用于本生日网站的角色图
   dogs: {
     maltese: {
-      happy: 'assets/dogs/opening/maltese.png',
+      happy: 'assets/dogs/opening/maltese.webp',
       'flower-browse': 'assets/dogs/flower-shop/maltese-browse.png',
       'flower-arrange': 'assets/dogs/flower-shop/maltese-arrange.png',
       'flower-wrap': 'assets/dogs/flower-shop/maltese-wrap.png',
@@ -35,7 +35,7 @@ export const assets: {
       'collection-welcome-pair': 'assets/dogs/collection/pair-welcome.png',
     },
     golden: {
-      happy: 'assets/dogs/opening/golden.png',
+      happy: 'assets/dogs/opening/golden.webp',
       'flower-browse': 'assets/dogs/flower-shop/golden-browse.png',
       'flower-arrange': 'assets/dogs/flower-shop/golden-arrange.png',
       'flower-wrap': 'assets/dogs/flower-shop/golden-wrap.png',
