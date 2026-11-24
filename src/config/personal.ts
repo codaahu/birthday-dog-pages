@@ -1,10 +1,10 @@
 export const personal = {
-  recipient: ['寿星', '生日主角'],
+  recipient: ['小伙子', '宝'],
   sender: '小金毛',
   maltese: '小白',
-  signature: '生日派对的小狗们',
-  birthday: '2026-12-01',
-  birthdayStart: '2026-12-01T00:00:00+08:00',
-  meetingAt: '2026-12-05T18:00:00+08:00',
+  signature: '你的小金毛',
+  birthday: '2026-11-24',
+  birthdayStart: '2026-11-24T00:00:00+08:00',
+  meetingAt: '2026-11-27T23:05:00+08:00',
   timeZone: 'Asia/Shanghai',
 } as const

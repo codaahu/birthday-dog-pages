@@ -29,7 +29,7 @@ export const ribbons = {
   yellow: { name: '黄色', color: '#eac36c' },
 } as const
 
-export const cardMessages = ['生日快乐呀！', '今天的花花送给你。', '祝今天的派对玩得开心！']
+export const cardMessages = ['生日快乐呀！', '今天的花花送给你。', '周末见，记得来领抱抱。']
 export const flowerNotes = {
   eucalyptus: '这个负责让花束看起来很贵汪。',
   rose: '这枝玫瑰，替你先说一句喜欢。',

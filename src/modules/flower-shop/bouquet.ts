@@ -79,7 +79,7 @@ export function bouquetOrder(bouquet: Bouquet) {
     total: '¥0.00',
     delivery: '本周末配送',
     payment: '一个抱抱支付',
-    status: '已接单，等待小狗配送',
+    status: '已接单，等待男朋友配送',
   }
 }
 

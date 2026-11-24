@@ -26,6 +26,36 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       - run: npm run build
+      - name: Check out photo assets
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: codaahu/birthday-dog-pages-assets
+          ref: main
+          ssh-key: ${{ secrets.PAGES_ASSETS_DEPLOY_KEY }}
+          persist-credentials: false
+          path: .run/pages-assets
+      - name: Add published gallery
+        run: |
+          cp -a .run/pages-assets/photos/. dist/photos/
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict'
+          import { readFile, readdir } from 'node:fs/promises'
+
+          const directory = 'dist/photos'
+          const { photos } = JSON.parse(await readFile(directory + '/manifest.json', 'utf8'))
+          assert.ok(Array.isArray(photos) && photos.length > 0, 'The published gallery must contain photos')
+          const expected = new Set(['manifest.json'])
+          for (const { id, image, thumbnail } of photos) {
+            assert.match(id, /^photo-[0-9a-f]{24}$/)
+            assert.equal(image, 'photos/' + id + '.webp')
+            assert.equal(thumbnail, 'photos/' + id + '-thumb.webp')
+            expected.add(id + '.webp')
+            expected.add(id + '-thumb.webp')
+          }
+          assert.equal(expected.size, photos.length * 2 + 1)
+          assert.deepEqual(new Set(await readdir(directory)), expected)
+          console.log('Packaged', photos.length, 'gallery photos')
+          NODE
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
         with:

@@ -30,5 +30,5 @@ export const scaleMax = 150
 export const wishCopy = {
   title: '闭上眼睛，偷偷许个愿吧',
   message: '愿你新的一岁，有很多很多喜欢的事情发生。',
-  finished: '愿望留在心里。生日快乐！',
+  finished: '愿望已发送成功！男朋友没有查看权限。',
 } as const

@@ -12,12 +12,12 @@ describe('默契问答', () => {
     expect(Module).toBeDefined()
   })
 
-  it('提供四道派对题，每题四个可选答案及反馈', () => {
+  it('保留四道原版题，每题四个可选答案及反馈', () => {
     expect(confirmedQuestions.map(({ prompt }) => prompt)).toEqual([
-      '生日派对的小狗助手可以做什么？',
-      '派对纪念照拍糊了，应该怎么办？',
+      '和你一起出去旅游，男朋友的主要职责是什么？',
+      '如果男朋友拍的照片不好看，应该怎么办？',
       '今天谁说了算？',
-      '到达小狗派对后，你想先做什么？',
+      '周末见面之后，第一件事应该做什么？',
     ])
     for (const { options } of confirmedQuestions) {
       expect(options.map(({ id }) => id)).toEqual(['A', 'B', 'C', 'D'])
@@ -25,7 +25,7 @@ describe('默契问答', () => {
     }
   })
 
-  it('跳过缺图扩展题，保留有图题且保留四道演示题', () => {
+  it('跳过缺图扩展题，保留有图题且保留四道原版题', () => {
     const extra = { ...confirmedQuestions[0], id: 'photo-extra', photoId: 'trip' }
     expect(quizQuestions([], [extra])).toHaveLength(4)
     const withPhoto = quizQuestions([
@@ -42,7 +42,7 @@ describe('默契问答', () => {
     const snapshot = quizSnapshot(selected)
     expect(snapshot.version).toBe(quizVersion)
     expect(snapshot.answers).toMatchObject([{
-      questionId: 'travel-role', option: { id: 'D', text: '以上全部', feedback: '恭喜解锁全能派对助手！' },
+      questionId: 'travel-role', option: { id: 'D', text: '以上全部', feedback: '恭喜解锁全能男朋友！' },
     }])
     expect(snapshot.questions[0].options).toHaveLength(4)
   })

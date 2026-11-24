@@ -22,7 +22,7 @@ describe('周末见面站', () => {
   it('到点即切换文案，北京时间次日再切换后续文案', () => {
     const target = Date.parse(personal.meetingAt)
     expect(meetingMoment(personal.meetingAt, target)).toMatchObject({ stage: 'arrived', countdown: null })
-    const midnight = Date.parse('2026-12-06T00:00:00+08:00')
+    const midnight = Date.parse('2026-11-28T00:00:00+08:00')
     expect(meetingMoment(personal.meetingAt, midnight - 1).stage).toBe('arrived')
     expect(meetingMoment(personal.meetingAt, midnight)).toMatchObject({ stage: 'after', countdown: null })
   })

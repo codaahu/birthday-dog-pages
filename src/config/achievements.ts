@@ -1,6 +1,6 @@
 export const achievementNames = {
   'dog-petting': '摸狗大师',
-  'funny-album': '发现小狗秘密相册',
+  'funny-album': '成功抓获男朋友',
   'memory-collector': '回忆收藏家',
   'memory-detective': '回忆侦探',
   'food-radar': '吃货雷达',
