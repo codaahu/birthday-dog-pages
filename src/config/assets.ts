@@ -1,3 +1,5 @@
+import type { ModuleId } from './storyFlow'
+
 export type Dog = 'maltese' | 'golden'
 export type MusicScene = 'gentle' | 'play' | 'wish'
 
@@ -10,7 +12,7 @@ export const assets: {
   // 网页版使用已确认可用于本生日网站的角色图
   dogs: {
     maltese: {
-      happy: 'assets/dogs/opening/maltese.webp',
+      happy: 'assets/dogs/opening/maltese.png',
       'flower-browse': 'assets/dogs/flower-shop/maltese-browse.png',
       'flower-arrange': 'assets/dogs/flower-shop/maltese-arrange.png',
       'flower-wrap': 'assets/dogs/flower-shop/maltese-wrap.png',
@@ -35,7 +37,7 @@ export const assets: {
       'collection-welcome-pair': 'assets/dogs/collection/pair-welcome.png',
     },
     golden: {
-      happy: 'assets/dogs/opening/golden.webp',
+      happy: 'assets/dogs/opening/golden.png',
       'flower-browse': 'assets/dogs/flower-shop/golden-browse.png',
       'flower-arrange': 'assets/dogs/flower-shop/golden-arrange.png',
       'flower-wrap': 'assets/dogs/flower-shop/golden-wrap.png',
@@ -63,3 +65,19 @@ export const assets: {
   sounds: {},
   room: 'assets/room/memory-room-scene.webp',
 }
+
+
+// 主线只预取紧接着一关的首屏配图
+const { maltese, golden } = assets.dogs
+export const sceneEntryImages = {
+  opening: [maltese.happy, golden.happy],
+  'memory-room': [assets.room],
+  'flower-shop': [maltese['flower-browse'], golden['flower-browse']],
+  'cake-shop': [maltese['cake-make'], golden['cake-make']],
+  'catch-gifts': [maltese['catch-idle'], golden['catch-idle']],
+  'couple-quiz': [maltese['quiz-host'], golden['quiz-host']],
+  gashapon: [maltese['gacha-idle'], golden['gacha-idle']],
+  meeting: [maltese['meeting-run'], golden['meeting-run']],
+  ending: [maltese['ending-celebrate-pair']],
+  collection: [maltese['collection-welcome-pair']],
+} satisfies Record<ModuleId, readonly (string | null | undefined)[]>

@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { sceneEntryImages } from '../../config/assets'
 import { emptyPhotos } from '../../config/photos'
-import { chapters, type ModuleId } from '../../config/storyFlow'
+import { chapters, storyFlow, type ModuleId } from '../../config/storyFlow'
 import { SceneAudio } from '../audio'
 import type { Profile, Run, Settings } from '../storage/types'
 import { collectionSelection, loadPhotos, moduleContext } from './context'
 import type { CollectionControls, CollectionSelection, ModuleCompletion } from './contract'
+import { prefetchImage } from './imagePreload'
 import { modules } from './modules'
 import { services } from './runtime'
 
@@ -24,6 +26,7 @@ const activeRun = computed(() => mode.value === 'story' ? run.value : undefined)
 const context = computed(() => moduleContext(mode.value, services, activeRun.value, photos.value, Date.now(), id.value,
   mode.value === 'collection' && id.value !== 'collection' ? collectionSelection(route.query) : undefined))
 const audio = new SceneAudio()
+const sceneRoot = ref<HTMLElement>()
 // 回忆小屋在自己的页首呈现现有主线控件
 const roomPage = computed(() => id.value === 'memory-room')
 const housePage = computed(() => id.value === 'collection')
@@ -47,6 +50,11 @@ onMounted(() => {
   void loadPhotos().then((manifest) => { photos.value = manifest })
 })
 onUnmounted(() => audio.dispose())
+watch([id, mode, () => Boolean(profile.value)], ([step, sceneMode, ready]) => {
+  if (ready && sceneMode === 'story' && step !== 'opening') {
+    void preloadNextScene(step)
+  }
+}, { flush: 'post' })
 watch([current, profile], () => {
   if (current.value && profile.value) {
     audio.configure(current.value.config.music, profile.value.settings)
@@ -193,10 +201,45 @@ async function refreshHouseSession() {
   run.value = state.run
   profile.value = state.profile
 }
+
+
+/**
+ * 当前图就绪后，预取主线下一关的首屏图片
+ *
+ * @author 何齐龙
+ * @date 2026/11/24 22:48
+ * @param step 当前主线关卡，用于选择下一关并判断是否已离开
+ */
+async function preloadNextScene(step: ModuleId) {
+  if (mode.value !== 'story' || step === 'collection') {
+    return
+  }
+
+  await nextTick()
+  // 等当前关卡的现有图片，预取不会抢首屏请求
+  const currentImages = Array.from(sceneRoot.value?.querySelectorAll('img, svg image') ?? [])
+  await Promise.allSettled(currentImages.map((image) => {
+    if (image instanceof HTMLImageElement) {
+      return image.decode()
+    }
+    const source = image.getAttribute('href')
+    return source ? prefetchImage(source) : undefined
+  }))
+
+  const next = storyFlow[storyFlow.indexOf(step) + 1] ?? 'collection'
+  for (const path of sceneEntryImages[next]) {
+    if (mode.value !== 'story' || id.value !== step) {
+      return
+    }
+    if (path) {
+      await prefetchImage(import.meta.env.BASE_URL + path)
+    }
+  }
+}
 </script>
 
 <template>
-  <main class="story" :class="{ 'room-story': roomPage }" @click.capture="audio.activate()">
+  <main ref="sceneRoot" class="story" :class="{ 'room-story': roomPage }" @click.capture="audio.activate()">
     <header v-if="profile && !roomPage && !housePage" class="bar">
       <ol v-if="mode === 'story'" class="progress" aria-label="冒险进度">
         <li v-for="chapter in chapters" :key="chapter.id" :class="{ done: activeRun?.chapters[chapter.id] }">
@@ -215,7 +258,7 @@ async function refreshHouseSession() {
     <component v-if="current && profile" :is="current.component" :key="id + ':' + mode + (context.collectionSelection ? ':' + route.fullPath : '')"
       :context="context" v-bind="roomControls ? { roomControls } : houseControls ? { houseControls }
         : id === 'ending' ? { completionPending: busy } : {}"
-      @completed="complete" @request-exit="requestExit" />
+      @dialogue-ready="preloadNextScene('opening')" @completed="complete" @request-exit="requestExit" />
 
     <div v-if="!roomPage && mode === 'story' && activeRun?.kind === 'replay'" class="actions">
       <button class="secondary" type="button" :disabled="busy" @click="replay('pause')">返回小屋</button>

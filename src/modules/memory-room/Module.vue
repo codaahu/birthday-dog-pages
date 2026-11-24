@@ -4,6 +4,7 @@ import type { AchievementId } from '../../config/achievements'
 import { dialogue } from '../../config/dialogue'
 import { personal } from '../../config/personal'
 import type { ModuleCompletion } from '../../core/story/contract'
+import { prefetchImage } from '../../core/story/imagePreload'
 import { newId } from '../../core/storage/id'
 import AchievementToast from '../../shared/AchievementToast.vue'
 import { useAchievementToast } from '../../shared/useAchievementToast'
@@ -22,6 +23,7 @@ const props = defineProps<ModuleProps>()
 const emit = defineEmits<{ completed: [result: ModuleCompletion] }>()
 type Panel = 'album' | 'shelf' | 'puzzle' | 'funny' | 'transition'
 const panel = ref<Panel>()
+const backgroundReady = ref(false)
 const dialog = ref<HTMLDialogElement>()
 const panelClose = ref<HTMLButtonElement>()
 const category = ref<AlbumCategory>('couple')
@@ -88,6 +90,27 @@ watch([readyForCollection, photos], () => {
     void openAlbum(album)
   }
 })
+watch([backgroundReady, photos, panel], async ([ready, items, openPanel], _previous, onCleanup) => {
+  if (!ready || openPanel) {
+    return
+  }
+
+  let cancelled = false
+  onCleanup(() => { cancelled = true })
+
+  // 先从墙上相框开始，逐张预取各相册的第一张高清图
+  const albumOrder: AlbumCategory[] = [...albums.value, 'pet', 'funny']
+  for (const album of albumOrder) {
+    if (cancelled) {
+      return
+    }
+    const path = items.find((photo) => photo.category === album)?.image
+    if (path && !path.startsWith('data:')) {
+      await prefetchImage(import.meta.env.BASE_URL + path)
+    }
+  }
+})
+
 onUnmounted(() => {
   clearInterval(ticker)
   clearTimeout(petTimer)
@@ -510,7 +533,7 @@ async function openFunny() {
 <template>
   <section class="memory-room">
     <RoomPageFrame :controls="roomControls" :found="foundMemories" :total="mainMemoryPoints.length">
-      <RoomArt @explore="explore" />
+      <RoomArt @explore="explore" @background-ready="backgroundReady = true" />
       <template #actions>
         <p v-if="errorMessage && !panel" role="alert">{{ errorMessage }}</p>
         <button v-if="context.mode !== 'collection' && progress.ready" class="primary" type="button"

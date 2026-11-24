@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { assets } from '../../config/assets'
 import { foodHotspots, hotspots, type HotspotId } from './room'
 
-const emit = defineEmits<{ explore: [id: HotspotId] }>()
+const emit = defineEmits<{ explore: [id: HotspotId]; 'background-ready': [] }>()
 const image = assets.room ? import.meta.env.BASE_URL + assets.room : undefined
 const previousTap = ref<{ id: HotspotId; count: number }>()
 
@@ -21,7 +21,8 @@ function touch(id: HotspotId) {
 
 <template>
   <div class="art">
-    <img :src="image" alt="暖灯下的礼物小屋" width="1312" height="1199" />
+    <img :src="image" alt="暖灯下的礼物小屋" width="1312" height="1199" fetchpriority="high"
+      @load="emit('background-ready')" @error="emit('background-ready')" />
     <button v-for="spot in hotspots" :key="spot.id" class="spot" type="button"
       :class="{ edible: foodHotspots.some(({ id }) => id === spot.id) }"
       :style="{ left: spot.x + '%', top: spot.y + '%', width: spot.w + '%', height: spot.h + '%' }"

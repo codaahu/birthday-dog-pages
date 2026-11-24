@@ -32,7 +32,7 @@
 - 白色马尔济斯 `maltese.png`，对应 [原图](https://u-genie.com/wp-content/uploads/2025/07/ourchacard_01.jpg)
 - 黄色小金毛 `golden.png`，对应 [原图](https://u-genie.com/wp-content/uploads/2025/07/ourchacard_02.jpg)
 
-2026-11-24 用户确认本文记录的角色素材可用于本生日网站。发布用透明角色图位于 `public/assets/dogs/`，开场两张使用透明 WebP，由 `src/config/assets.ts` 配置；开场原图仍保存在 `materials/`。
+2026-11-24 用户确认本文记录的角色素材可用于本生日网站。发布用透明 PNG 位于 `public/assets/dogs/`，由 `src/config/assets.ts` 配置；开场原图仍保存在 `materials/`。
 
 ## 小狗花店动作图
 

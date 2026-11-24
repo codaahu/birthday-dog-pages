@@ -11,7 +11,7 @@ import { faceForPage, restoredPage } from './flow'
 import type { DogPose, ModuleProps } from './types'
 
 const props = defineProps<ModuleProps>()
-const emit = defineEmits<{ completed: [result: ModuleCompletion] }>()
+const emit = defineEmits<{ completed: [result: ModuleCompletion]; 'dialogue-ready': [] }>()
 const lines = computed(() => props.context.replay ? [dialogue.opening.replay] : dialogue.opening.lines)
 const page = ref(restoredPage(props.context.draft?.page, lines.value.length))
 const entering = ref(false)
@@ -58,11 +58,14 @@ onUnmounted(() => {
 })
 
 watch(cover, async (visible) => {
+  if (!visible && props.context.mode === 'story') {
+    emit('dialogue-ready')
+  }
   if (!visible && wasOpenedHere.value) {
     await nextTick()
     dialogueButton.value?.focus({ preventScroll: true })
   }
-})
+}, { immediate: true })
 
 watch(speaker, (dog) => {
   if (dog && poses[dog] === 'sleep') {
