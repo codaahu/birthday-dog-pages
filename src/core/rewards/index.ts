@@ -1,5 +1,7 @@
 import { ordinaryTickets, weekendTicket } from '../../config/rewards'
 import type { ChapterId } from '../../config/storyFlow'
+import { hasAllTickets } from '../achievements/rules'
+import { addAchievements } from '../storage/achievementRecords'
 import type { BirthdayDatabase } from '../storage/database'
 import type { Draw, Profile, Run, Ticket } from '../storage/types'
 
@@ -184,16 +186,24 @@ export class RewardService {
   /**
    * 揭晓已付费扭蛋，保留首次揭晓时间
    *
-   * @date 2026/11/24 10:54
+   * @date 2026/11/25 11:25
    * @param id 抽取 ID
    * @return 更新后的抽取记录，找不到时为 undefined
    */
   async reveal(id: string) {
-    return this.db.transaction('rw', this.db.draws, async () => {
+    return this.db.transaction('rw', this.db.draws, this.db.tickets, this.db.achievements, async () => {
       const draw = await this.db.draws.get(id)
       if (draw && !draw.revealedAt) {
         draw.revealedAt = new Date().toISOString()
         await this.db.draws.put(draw)
+
+        // 仅已揭晓的不同券面计入套装
+        if (!(await this.db.achievements.get('nine-capsules'))) {
+          const [tickets, draws] = await Promise.all([this.db.tickets.toArray(), this.db.draws.toArray()])
+          if (hasAllTickets(tickets, draws)) {
+            await addAchievements(this.db, ['nine-capsules'], { createdAt: draw.revealedAt, runId: null })
+          }
+        }
       }
       return draw
     })
@@ -202,13 +212,13 @@ export class RewardService {
   /**
    * 记下已确认的兑现操作，保留兑现历史
    *
-   * @date 2026/11/24 10:54
+   * @date 2026/11/25 11:25
    * @param id 已领取的券 ID
    * @param confirmed 用户是否已确认兑现
    * @return 当前券记录，找不到时为 undefined
    */
   async redeem(id: string, confirmed: boolean) {
-    return this.db.transaction('rw', this.db.tickets, this.db.draws, async () => {
+    return this.db.transaction('rw', this.db.tickets, this.db.draws, this.db.achievements, async () => {
       const ticket = await this.db.tickets.get(id)
       const now = new Date().toISOString()
       if (confirmed && ticket && !ticket.usedAt && (!ticket.validUntil || now <= new Date(ticket.validUntil).toISOString())) {
@@ -216,6 +226,11 @@ export class RewardService {
         if (draw?.revealedAt) {
           ticket.usedAt = now
           await this.db.tickets.put(ticket)
+
+          // 抱抱券真正兑现后才解锁
+          if (ticket.type === 'hug') {
+            await addAchievements(this.db, ['hug-delivered'], { createdAt: now, runId: ticket.runId })
+          }
         }
       }
       return ticket

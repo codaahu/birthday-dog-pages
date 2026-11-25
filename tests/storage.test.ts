@@ -1,5 +1,7 @@
 import Dexie from 'dexie'
 import { afterEach, describe, expect, it } from 'vitest'
+import { achievementCopy } from '../src/config/achievements'
+import { ordinaryTickets, weekendTicket } from '../src/config/rewards'
 import { createServices } from '../src/core/storage'
 import {
   developmentDatabaseName, productionDatabaseName, schemaVersion, versionOneStores,
@@ -324,5 +326,158 @@ describe('公共存档', () => {
     await services.rewards.redeem(ordinary.ticket.id, true)
     expect((await services.rewards.shop(runId)).revealed.find(({ ticket }) => ticket.id === ordinary.ticket.id)?.ticket.usedAt).toBeDefined()
     services.db.close()
+  })
+})
+
+describe('新增成就与旧存档兼容', () => {
+  it('重开旧档并从两个连接补发时，只写缺失成就，保留所有历史和小屋权限', async () => {
+    const { db, rewards, history, story, backup } = testServices()
+    const runId = await finishFirst({ db, rewards, history, story, backup })
+    const createdAt = '2026-11-24T10:00:00+08:00'
+    const issued = { runId, createdAt }
+
+    // 直接写入旧版本已有的快照结构，避免触发新版实时成就
+    await db.works.bulkAdd([
+      { id: 'stored-flower', ...issued, kind: 'bouquet', favorite: true,
+        snapshot: { design: { stems: Array.from({ length: 9 }, () => ({ kind: 'rose' })) } } },
+      { id: 'stored-cake', ...issued, kind: 'cake', favorite: false,
+        snapshot: { design: { sponge: 'matcha', pieces: [{ kind: 'kiwi' }, { kind: 'dog' }, { kind: 'dog' }, { kind: 'dog' }] } } },
+    ])
+    await db.gameResults.bulkAdd([
+      { id: 'stored-catch', ...issued, kind: 'catch-gifts', status: 'completed', score: 320, details: { gifts: 10, troubles: 0 } },
+      { id: 'stored-trouble', ...issued, kind: 'catch-gifts', status: 'completed', score: 0, details: { gifts: 0, troubles: 4 } },
+      { id: 'stored-quiz', ...issued, kind: 'couple-quiz', status: 'completed', answerSnapshot: {
+        version: '2026-11-24.1',
+        answers: ['travel-role', 'retry-photo', 'birthday-boss', 'weekend-first'].map((questionId) => ({ questionId, option: { id: 'C' } })),
+      } },
+    ])
+    const shop = await rewards.shop(null)
+    const spent = shop.revealed.find(({ ticket }) => ticket.type !== 'weekend-meeting' && ticket.type !== 'hug')!
+    await rewards.redeem(spent.ticket.id, true)
+
+    const replay = await story.startReplay()
+    await story.saveDraft(replay!.id, 'opening', { page: 'intro' })
+    await story.setReplayActive(false, replay!.id)
+    const previous = JSON.parse(await backup.exportJson())
+    const previousAchievements = previous.tables.achievements
+    const balance = await rewards.balance()
+    const name = db.name
+    db.close()
+
+    const upgraded = createServices(name)
+    const otherTab = createServices(name)
+    try {
+      await Promise.all([upgraded.history.reconcileAchievements(), otherTab.history.reconcileAchievements()])
+      const next = JSON.parse(await upgraded.backup.exportJson())
+      expect(next.tables.achievements).toEqual(expect.arrayContaining(previousAchievements))
+      const newIds = next.tables.achievements
+        .filter(({ id }: { id: string }) => !previousAchievements.some((entry: { id: string }) => entry.id === id))
+        .map(({ id }: { id: string }) => id)
+      expect(newIds.sort()).toEqual([
+        'dog-cake', 'flowers-and-cake', 'matcha-cake', 'nine-roses', 'no-overtime',
+        'quiz-all-c', 'quiz-golden-boss', 'quiz-photographer',
+      ])
+      next.tables.achievements = previousAchievements
+      expect(next).toEqual(previous)
+      expect(await upgraded.rewards.balance()).toBe(balance)
+      const state = await upgraded.story.session()
+      expect(resolveAccess({ name: 'home' }, state.profile, state.run)).toEqual({ name: 'collection' })
+      const afterRepair = await upgraded.backup.exportJson()
+      await upgraded.history.reconcileAchievements()
+      expect(await upgraded.backup.exportJson()).toBe(afterRepair)
+      expect(upgraded.backup.preview(afterRepair).works).toBe(2)
+    } finally {
+      upgraded.db.close()
+      otherTab.db.close()
+    }
+  })
+
+  it('问答只按同一轮的原题选项判定，重复结算沿用首次快照', async () => {
+    const { history } = testServices()
+    const questionIds = ['travel-role', 'retry-photo', 'birthday-boss', 'weekend-first']
+    const cases = [
+      ['DDDD', ['quiz-all-duties', 'quiz-birthday-hug', 'quiz-all-d']],
+      ['CCCC', ['quiz-photographer', 'quiz-golden-boss', 'quiz-all-c']],
+      ['BAAA', ['quiz-food-first']],
+      ['ADAD', []],
+      ['DCAA', []],
+    ] as const
+    for (const [letters, expected] of cases) {
+      const result = {
+        id: letters, runId: null, kind: 'couple-quiz' as const, status: 'completed' as const,
+        answerSnapshot: { answers: questionIds.map((questionId, index) => ({ questionId, option: { id: letters[index] } })) },
+      }
+      expect((await history.settleQuizResult(result)).unlocked).toEqual(expected)
+      const repeated = await history.settleQuizResult({ ...result, answerSnapshot: { answers: [] } })
+      expect(repeated.unlocked).toEqual([])
+      expect(repeated.record.answerSnapshot).toEqual(result.answerSnapshot)
+    }
+    expect(Object.entries(achievementCopy).filter(([, copy]) => copy.hidden).map(([id]) => id).sort())
+      .toEqual(['dog-cake', 'nine-roses', 'quiz-all-c', 'quiz-golden-boss', 'workaholic'])
+  })
+
+  it('实时结算区分工作、烦恼和情书，花束与蛋糕按成品材料解锁', async () => {
+    const { history } = testServices()
+    const cases = [
+      ['empty', { gifts: 0, troubles: 0, workMessages: 0, letters: 0 }, []],
+      ['mixed', { gifts: 0, troubles: 2, workMessages: 1, letters: 0 }, []],
+      ['work', { gifts: 0, troubles: 2, workMessages: 2, letters: 0 }, ['workaholic']],
+      ['letters', { gifts: 10, troubles: 0, workMessages: 0, letters: 3 }, ['no-overtime', 'boyfriend-letters']],
+    ] as const
+    for (const [id, details, expected] of cases) {
+      const result = { id, runId: null, kind: 'catch-gifts' as const, status: 'completed' as const, score: 0, details }
+      expect((await history.settleScoredResult(result, [])).unlocked).toEqual(expected)
+    }
+    const flowers = ['tulip', 'lisianthus', 'daisy', 'sunflower', 'rose', 'hydrangea', 'gypsophila', 'eucalyptus']
+    const fruits = ['strawberry', 'mango', 'blueberry', 'cherry', 'kiwi']
+    await history.saveWork({ id: 'mixed-flowers', runId: null, kind: 'bouquet',
+      snapshot: { design: { stems: flowers.map((kind) => ({ kind })) } } })
+    await history.saveWork({ id: 'sunflowers', runId: null, kind: 'bouquet',
+      snapshot: { design: { stems: Array.from({ length: 5 }, () => ({ kind: 'sunflower' })) } } })
+    await history.saveWork({ id: 'fruit-cake', runId: null, kind: 'cake',
+      snapshot: { design: { sponge: 'matcha', pieces: fruits.map((kind) => ({ kind })) } } })
+    expect((await history.read()).achievements.map(({ id }) => id).sort()).toEqual([
+      'boyfriend-letters', 'flower-family', 'flowers-and-cake', 'fruit-cake', 'no-overtime', 'sunflower-bouquet', 'workaholic',
+    ])
+  })
+
+  it('最后一种券揭晓才算集齐，抱抱券需要确认兑现，第二次通关只记一次', async () => {
+    const services = testServices()
+    const { db, rewards, story, history } = services
+    const firstId = await finishFirst(services)
+    const createdAt = new Date().toISOString()
+
+    // 补齐奖池剩余券种，保留最后一张为未揭晓
+    const existing = new Set((await db.tickets.toArray()).map(({ type }) => type))
+    const missing = [...ordinaryTickets, weekendTicket].filter(({ type }) => !existing.has(type))
+    const finalId = 'achievement-draw-' + missing.at(-1)!.type
+    for (const [index, entry] of missing.entries()) {
+      const id = 'achievement-ticket-' + entry.type
+      await db.tickets.add({ id, runId: null, createdAt, type: entry.type, rarity: entry.rarity })
+      const drawId = 'achievement-draw-' + entry.type
+      await db.draws.add({ id: drawId, ticketId: id, runId: null, number: index + 1, createdAt,
+        revealedAt: drawId === finalId ? undefined : createdAt })
+    }
+    const hug = (await db.tickets.filter((ticket) => ticket.type === 'hug').first())!
+    await rewards.redeem(hug.id, false)
+    await history.reconcileAchievements()
+    expect(await db.achievements.get('hug-delivered')).toBeUndefined()
+    expect(await db.achievements.get('nine-capsules')).toBeUndefined()
+    await rewards.reveal(finalId)
+    const used = await rewards.redeem(hug.id, true)
+    expect(used?.usedAt).toBeDefined()
+    expect(await db.achievements.get('hug-delivered')).toBeDefined()
+    expect(await db.achievements.get('nine-capsules')).toBeDefined()
+
+    const replay = (await story.startReplay())!
+    expect(await db.achievements.get('second-birthday')).toBeUndefined()
+    for (const step of ['opening', 'memory-room', 'flower-shop', 'cake-shop', 'catch-gifts', 'couple-quiz',
+      'gashapon', 'meeting', 'ending'] as const) {
+      await story.complete(replay.id, step, 'completed')
+    }
+    expect(await db.achievements.get('second-birthday')).toBeDefined()
+    expect(await db.completions.count()).toBe(2)
+    expect(await db.completions.get(firstId)).toBeDefined()
+    expect(await story.complete(replay.id, 'ending', 'completed')).toBeUndefined()
   })
 })

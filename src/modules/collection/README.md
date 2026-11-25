@@ -5,7 +5,9 @@
 执行 `npm run dev` 后打开上述地址。默认使用独立的「生日小屋 · 示例收藏」，可查看样例作品和游戏、切换导航并练习重玩或合并备份。[无素材预览](http://127.0.0.1:5173/#/dev/collection?scene=empty) 便于检查没有照片和作品时的页面。
 
 - `Module.vue` 是正式小屋和开发场景共用入口
-- `HouseShelf.vue` 展示收藏、记录及完整生日信，`HouseSticker.vue` 绘制首页贴纸
+- `HouseShelf.vue` 展示收藏及完整生日信，`HouseSticker.vue` 绘制首页贴纸
+- `HouseAchievements.vue` 与 `achievementGroups.ts` 实现分组图鉴。进入「收藏」后展开分组，只能点开已解锁的成就，全图鉴同时只展开一张卡片
+- `src/config/achievements.ts` 配置成就名称、条件、解锁文案和隐藏状态。进入小屋或导入备份后，按已有记录补发符合条件的成就
 - `HouseSettings.vue` 处理音频设置、备份导出、导入预览及确认
 - `src/core/storage/backup.ts` 统一校验并事务合并备份，`tests/backup.test.ts` 验证往返、唯一发行与错误回滚
 - `config.ts` 管理标题、主题、音频场景及实施阶段

@@ -1,5 +1,7 @@
 import type { AchievementId } from '../../config/achievements'
 import { chapters } from '../../config/storyFlow'
+import { giftAchievements, hasAllTickets, quizAchievements, workAchievements } from '../achievements/rules'
+import { addAchievements } from './achievementRecords'
 import type { BirthdayDatabase } from './database'
 import type { GameResult, MemoryRecord, Work } from './types'
 
@@ -40,7 +42,7 @@ export class HistoryService {
   /**
    * 以调用方稳定 ID 保存作品快照及对应成就，重复提交返回已保存作品
    *
-   * @date 2026/11/24 11:51
+   * @date 2026/11/25 11:25
    * @param work 作品 ID、种类、快照与轮次；独立创作时轮次为 null
    * @param achievement 与作品同时提交的成就 ID，可省略
    * @return 首次保存的作品快照
@@ -52,8 +54,17 @@ export class HistoryService {
       if (!existing) {
         await this.db.works.add(record)
       }
-      if (achievement && !(await this.db.achievements.get(achievement))) {
-        await this.db.achievements.add({ id: achievement, runId: record.runId, createdAt: record.createdAt })
+      // 成品与对应成就一起保存，重试使用首次记录
+      const awards = workAchievements(record)
+      if (achievement) {
+        awards.push(achievement)
+      }
+      await addAchievements(this.db, awards, record)
+
+      // 两类作品可以来自不同轮次
+      const otherKind = record.kind === 'bouquet' ? 'cake' : 'bouquet'
+      if (await this.db.works.where('kind').equals(otherKind).first()) {
+        await addAchievements(this.db, ['flowers-and-cake'], { createdAt: record.createdAt, runId: null })
       }
       return record
     })
@@ -76,7 +87,7 @@ export class HistoryService {
   /**
    * 原子提交计分结果、刷新纪录状态和本次首次成就
    *
-   * @date 2026/11/24 16:00
+   * @date 2026/11/25 11:25
    * @param result 已完成的计分记录，重试时 ID 不变
    * @param awards 此分数触发的成就 ID
    * @return 持久成绩、历史最高分、是否刷新纪录和当次新成就
@@ -88,16 +99,9 @@ export class HistoryService {
         .and((item) => item.status === 'completed' && item.id !== record.id).toArray()
       const previousBest = scores.reduce((best, item) => Math.max(best, item.score ?? 0), 0)
       const highestScore = Math.max(previousBest, record.score ?? 0)
-      const unlocked: AchievementId[] = []
-
-      if (inserted) {
-        for (const id of new Set(awards)) {
-          if (!(await this.db.achievements.get(id))) {
-            await this.db.achievements.add({ id, runId: record.runId, createdAt: record.createdAt })
-            unlocked.push(id)
-          }
-        }
-      }
+      // 新规则只读取实际提交的接礼物成绩
+      const extra = record.kind === 'catch-gifts' ? giftAchievements(record.details) : []
+      const unlocked = inserted ? await addAchievements(this.db, [...awards, ...extra], record) : []
 
       return { record, highestScore, newRecord: inserted && highestScore > previousBest, unlocked }
     })
@@ -195,5 +199,66 @@ export class HistoryService {
     const record = { ...result, createdAt: new Date().toISOString() }
     await this.db.gameResults.add(record)
     return { record, inserted: true }
+  }
+
+  /**
+   * 原子保存问答快照和同一轮触发的新成就
+   *
+   * @date 2026/11/25 11:25
+   * @param result 已完成的问答结果，answerSnapshot 保存题目 ID 和实际选项 ID
+   * @return 首次保存的答题记录及本次新解锁的成就 ID
+   */
+  async settleQuizResult(result: Omit<GameResult, 'createdAt'> & { kind: 'couple-quiz'; status: 'completed' }) {
+    return this.db.transaction('rw', this.db.gameResults, this.db.achievements, async () => {
+      const { record } = await this.storeResult(result)
+      const unlocked = await addAchievements(this.db, quizAchievements(record), record)
+      return { record, unlocked }
+    })
+  }
+
+  /**
+   * 根据既有历史补发成就，保留全部原始记录
+   *
+   * @date 2026/11/25 11:25
+   */
+  async reconcileAchievements() {
+    // 先读取快照，再单独补写成就表，避免锁定作品和抽奖操作
+    const [works, results, tickets, draws, completions] = await this.db.transaction('r', [
+      this.db.works, this.db.gameResults, this.db.tickets, this.db.draws, this.db.completions,
+    ], () => Promise.all([
+      this.db.works.toArray(), this.db.gameResults.toArray(), this.db.tickets.toArray(),
+      this.db.draws.toArray(), this.db.completions.toArray(),
+    ]))
+
+    await this.db.transaction('rw', this.db.achievements, async () => {
+      // 逐轮判断，避免把不同轮次的答案或数量拼在一起
+      for (const result of results) {
+        if (result.status === 'completed' && result.kind === 'catch-gifts') {
+          await addAchievements(this.db, giftAchievements(result.details), result)
+        } else if (result.kind === 'couple-quiz') {
+          await addAchievements(this.db, quizAchievements(result), result)
+        }
+      }
+
+      // 成品快照可以追溯具体材料，跨轮条件以已保存的历史为准
+      for (const work of works) {
+        await addAchievements(this.db, workAchievements(work), work)
+      }
+      const source = { runId: null, createdAt: new Date().toISOString() }
+      if (works.some(({ kind }) => kind === 'bouquet') && works.some(({ kind }) => kind === 'cake')) {
+        await addAchievements(this.db, ['flowers-and-cake'], source)
+      }
+      if (hasAllTickets(tickets, draws)) {
+        await addAchievements(this.db, ['nine-capsules'], source)
+      }
+      const hug = tickets.find((ticket) => ticket.type === 'hug' && ticket.usedAt
+        && draws.some((draw) => draw.ticketId === ticket.id && draw.revealedAt))
+      if (hug?.usedAt) {
+        await addAchievements(this.db, ['hug-delivered'], { createdAt: hug.usedAt, runId: hug.runId })
+      }
+      if (completions.length >= 2) {
+        await addAchievements(this.db, ['second-birthday'], source)
+      }
+    })
   }
 }

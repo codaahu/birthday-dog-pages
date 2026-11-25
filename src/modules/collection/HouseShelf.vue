@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { achievementNames, type AchievementId } from '../../config/achievements'
 import { dialogue } from '../../config/dialogue'
 import { personal } from '../../config/personal'
 import { photoCategories, type Photo, type PhotoCategory } from '../../config/photos'
@@ -9,6 +8,7 @@ import type { ModuleId } from '../../config/storyFlow'
 import { ticketStatus } from '../../core/rewards/ticketStatus'
 import type { CollectionSelection } from '../../core/story/contract'
 import type { GameResult } from '../../core/storage/types'
+import HouseAchievements from './HouseAchievements.vue'
 import HouseSticker from './HouseSticker.vue'
 import type { HouseArchive, HousePage, RevealedTickets } from './types'
 
@@ -25,7 +25,6 @@ const gameKinds = [
 ] as const
 const categories: Record<PhotoCategory, string> = { couple: '情侣合照', portrait: '专属摄影展', travel: '旅行手账',
   daily: '日常与美食', engagement: '订婚纪念', funny: '搞怪相册', puzzle: '拼图照片', pet: '狗狗秘密相册' }
-const hiddenAchievements = new Set<AchievementId>(['funny-album', 'pet-discovery', 'dog-petting'])
 const captions = { bouquet: '我的花束', cake: '我的蛋糕', albums: '回忆相册', letter: '生日来信',
   games: '小游戏', gifts: '我的兑换券', collection: '我的收藏', home: '小屋', settings: '设置' }
 const dateFormat = new Intl.DateTimeFormat('zh-CN', { timeZone: personal.timeZone, dateStyle: 'medium' })
@@ -40,10 +39,6 @@ const albums = computed(() => photoCategories.flatMap((category) => {
 const works = computed(() => props.history.works.filter((work) => work.kind === props.page)
   .sort((a, b) => b.createdAt.localeCompare(a.createdAt)))
 const sortedGames = computed(() => [...props.history.results].sort((a, b) => b.createdAt.localeCompare(a.createdAt)))
-const allAchievements = computed(() => Object.entries(achievementNames).map(([key, name]) => {
-  const unlocked = props.history.achievements.some(({ id }) => id === key)
-  return { key, unlocked, name: !unlocked && hiddenAchievements.has(key as AchievementId) ? '？？？' : name }
-}))
 const ticketNames = new Map([...ordinaryTickets, weekendTicket].map(({ type, name }) => [type, name]))
 const letter = dialogue.letter
 
@@ -188,15 +183,8 @@ function catchHistory(results: GameResult[]) {
         <button v-for="entry in (['albums', 'bouquet', 'cake', 'letter'] as const)" :key="entry"
           type="button" class="small-link" @click="$emit('show', entry)">{{ captions[entry] }}</button>
       </div>
-      <h3>成就图鉴</h3>
-      <ul class="achievement-list">
-        <li v-for="achievement in allAchievements" :key="achievement.key" :class="{ unlocked: achievement.unlocked }">
-          <span aria-hidden="true">{{ achievement.unlocked ? '✦' : '✧' }}</span>
-          {{ achievement.name }}
-          <small>{{ achievement.unlocked ? '已解锁' : '待解锁' }}</small>
-        </li>
-      </ul>
-      <h3>冒险纪念</h3>
+      <HouseAchievements :achievements="history.achievements" />
+      <h3>通关记录</h3>
       <p v-if="!history.completions.length">尚未收藏冒险记录。</p>
       <ol v-else class="visits"><li v-for="record in history.completions" :key="record.id">{{ recordDate(record.createdAt) }} · 完成生日冒险</li></ol>
     </template>
@@ -228,10 +216,6 @@ summary { cursor: pointer; min-height: 44px; line-height: 2.6; font-size: .88rem
 summary span { float: right; color: #536144; }
 .puzzle-photo { max-height: 9rem; max-width: 100%; object-fit: contain; }
 .shortcuts { display: flex; flex-wrap: wrap; gap: .19rem .38rem; }
-.achievement-list { list-style: none; padding: 0; margin: 0 0 .7rem; }
-.achievement-list li { padding: .31rem .1rem; border-bottom: 1px dashed #d9b189; color: #735e4b; }
-.achievement-list li.unlocked { color: #566642; font-weight: 700; }
-.achievement-list small { float: right; }
 .visits { padding-left: 1.28rem; margin: 0; }
 .letter { background: repeating-linear-gradient(transparent 0 1.55rem,#dfb37d38 1.55rem 1.62rem); }
 .letter p { line-height: 1.65; margin: 0 0 .72rem; }

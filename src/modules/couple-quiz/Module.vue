@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, shallowRef, toRaw } from 'vue'
+import { achievementCopy, achievementNames, type AchievementId } from '../../config/achievements'
 import { dialogue } from '../../config/dialogue'
 import type { ModuleCompletion } from '../../core/story/contract'
 import { newId } from '../../core/storage/id'
@@ -18,6 +19,8 @@ const storyId = props.context.mode === 'story' && props.context.runId
 const restored = props.context.draft?.quiz as QuizRound | undefined
 const round = shallowRef(restored?.questions?.[restored.position] && Array.isArray(restored.answers) ? toRaw(restored) : undefined)
 const saved = ref<GameResult>()
+// 本轮首次解锁的成就及反馈
+const unlocked = ref<AchievementId[]>([])
 const busy = ref(Boolean(round.value || storyId))
 const error = ref('')
 const transition = ref(false)
@@ -84,7 +87,7 @@ async function choose(id: OptionId) {
 /**
  * 保存下一题位置，最后一题将冻结快照提交给历史存档
  *
- * @date 2026/11/24 16:48
+ * @date 2026/11/25 11:27
  */
 async function nextQuestion() {
   const current = round.value
@@ -95,10 +98,12 @@ async function nextQuestion() {
   error.value = ''
   try {
     if (lastQuestion.value) {
-      saved.value = await props.context.data.history.saveResult({
+      const commit = await props.context.data.history.settleQuizResult({
         id: current.id, runId: props.context.runId, kind: 'couple-quiz', status: 'completed',
         answerSnapshot: quizSnapshot(current), details: { title: quizCopy.result, answered: current.answers.length },
       })
+      saved.value = commit.record
+      unlocked.value = commit.unlocked
     } else {
       const next = { ...current, position: current.position + 1 }
       await props.context.data.saveDraft({ quiz: next })
@@ -225,6 +230,12 @@ function finish() {
         <p class="affinity">{{ quizCopy.affinity }} <strong>100%</strong></p>
         <h2>{{ quizCopy.result }}</h2>
         <p class="verdict">{{ quizCopy.verdict }}</p>
+        <ul v-if="unlocked.length" class="quiz-achievements" aria-label="本轮解锁的成就">
+          <li v-for="id in unlocked" :key="id">
+            <strong>{{ achievementNames[id] }}</strong>
+            <span>{{ achievementCopy[id]?.message }}</span>
+          </li>
+        </ul>
       </div>
       <div class="quiz-finish">
         <template v-if="context.mode !== 'collection'">
@@ -243,6 +254,9 @@ function finish() {
 </template>
 
 <style scoped>
+.quiz-achievements { list-style: none; margin: .65rem 0 0; padding: 0; }
+.quiz-achievements li { display: grid; gap: .12rem; padding: .34rem 0; border-top: 1px dashed #d8bd9e; }
+.quiz-achievements span { font-size: .86rem; }
 .quiz-page {
   --quiz-ink: #594233;
   --quiz-olive: #547052;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { achievementNames, type AchievementId } from '../config/achievements'
+import { achievementCopy, achievementNames, type AchievementId } from '../config/achievements'
 
 defineProps<{ achievement?: AchievementId; container?: HTMLDialogElement }>()
 </script>
@@ -14,7 +14,11 @@ defineProps<{ achievement?: AchievementId; container?: HTMLDialogElement }>()
             <circle cx="22" cy="20" r="14" fill="#f5ce7c" stroke="#926141" stroke-width="1.7" />
             <path d="M22 13l2 4 4 1-3 3 1 5-4-2-4 2 1-5-3-3 4-1Z" fill="#fff6dc" stroke="#926141" stroke-width="1.3" stroke-linejoin="round" />
           </svg>
-          <span><small>已解锁成就</small><strong>{{ achievementNames[achievement] }}</strong></span>
+          <span>
+            <small>已解锁成就</small>
+            <strong>{{ achievementNames[achievement] }}</strong>
+            <small v-if="achievementCopy[achievement]">{{ achievementCopy[achievement]?.message }}</small>
+          </span>
         </div>
       </Transition>
     </aside>

@@ -51,11 +51,19 @@ onUnmounted(() => {
 /**
  * 读取收藏、奖券和章节纪念章
  *
- * @date 2026/11/24 19:31
+ * @date 2026/11/25 11:27
  */
 async function readHistory() {
+  const { history, rewardShop } = props.context.data
+
+  // 补发失败时仍能正常读取和展示已有收藏
   try {
-    const { history, rewardShop } = props.context.data
+    await history.reconcileAchievements()
+  } catch (cause) {
+    console.error('补发生日小屋成就失败', cause)
+  }
+
+  try {
     const [records, shop, chapterMarks] = await Promise.all([history.read(), rewardShop(), history.chapterMarks()])
     if (!disposed) {
       archive.value = records

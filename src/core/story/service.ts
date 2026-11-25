@@ -1,5 +1,6 @@
 import { chapters, storyFlow, type StoryStep } from '../../config/storyFlow'
 import type { RewardService } from '../rewards'
+import { addAchievements } from '../storage/achievementRecords'
 import { schemaVersion, type BirthdayDatabase } from '../storage/database'
 import { newId } from '../storage/id'
 import { defaultSettings, type Profile, type Run, type Settings, type Snapshot, type StepStatus } from '../storage/types'
@@ -118,7 +119,7 @@ export class StoryService {
   /**
    * 提交剧情结果并原子保存进度、奖励和通关信息
    *
-   * @date 2026/11/24 10:54
+   * @date 2026/11/25 11:25
    * @param runId 当前轮次 ID
    * @param step 本次上报的关卡 ID
    * @param status 完成或跳过状态
@@ -168,6 +169,11 @@ export class StoryService {
         profile.everCompleted = true
         profile.activeRunId = undefined
         profile.completedCount += 1
+
+        // 两次完整结算后解锁，暂停中的重玩不计入
+        if (await this.db.completions.count() >= 2) {
+          await addAchievements(this.db, ['second-birthday'], { createdAt: now, runId: null })
+        }
         await this.db.profile.put(profile)
       } else {
         run.step = storyFlow[storyFlow.indexOf(step) + 1]

@@ -3,8 +3,16 @@ import { field, giftKinds, roundMs, type GiftKind } from './config'
 
 export interface FallingGift { id: number; kind: GiftKind; x: number; born: number }
 export interface VisibleGift extends FallingGift { y: number }
-export interface CatchTotals { score: number; gifts: number; troubles: number }
+export interface CatchTotals {
+  score: number
+  gifts: number
+  troubles: number
+  workMessages?: number
+  letters?: number
+}
 export interface Round extends CatchTotals {
+  workMessages: number
+  letters: number
   elapsed: number
   basket: number
   cursor: number
@@ -13,7 +21,7 @@ export interface Round extends CatchTotals {
 }
 
 export const emptyRound: Round = {
-  elapsed: 0, basket: field.width / 2, cursor: 0, visible: [], score: 0, gifts: 0, troubles: 0,
+  elapsed: 0, basket: field.width / 2, cursor: 0, visible: [], score: 0, gifts: 0, troubles: 0, workMessages: 0, letters: 0,
 }
 
 // 补充普通礼物的比重，并控制高分礼物出现频率
@@ -88,7 +96,7 @@ export function basketX(x: number) {
 /**
  * 推进画面到下一活动时刻，按穿过篮口时的位置判定并累计本局成绩
  *
- * @date 2026/11/24 16:01
+ * @date 2026/11/25 11:27
  * @param previous 上一帧的状态
  * @param plan 本局预生成的掉落顺序
  * @param elapsed 下一帧的活动时间
@@ -115,6 +123,10 @@ export function advanceRound(previous: Round, plan: readonly FallingGift[], elap
         next.score = Math.max(0, next.score + points)
         next.gifts += Number(points > 0)
         next.troubles += Number(points < 0)
+
+        // 成就需要区分工作消息和情书，原计分规则保持一致
+        next.workMessages += Number(gift.kind === 'work')
+        next.letters += Number(gift.kind === 'letter')
         next.hit = { gift: { ...gift, y: field.catchY }, at }
         continue
       }

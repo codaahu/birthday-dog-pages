@@ -77,7 +77,10 @@ onMounted(async () => {
     if (typeof draft?.roundId === 'string' && typeof draftTotals?.score === 'number'
       && typeof draftTotals.gifts === 'number' && typeof draftTotals.troubles === 'number') {
       roundId = draft.roundId
-      pending = { score: draftTotals.score, gifts: draftTotals.gifts, troubles: draftTotals.troubles }
+      pending = {
+        score: draftTotals.score, gifts: draftTotals.gifts, troubles: draftTotals.troubles,
+        workMessages: draftTotals.workMessages, letters: draftTotals.letters,
+      }
       await settle()
       return
     }
@@ -152,7 +155,7 @@ async function resumeRound() {
 /**
  * 推进游戏一帧，活动时间用尽时冻结成绩并发起一次结算
  *
- * @date 2026/11/24 16:04
+ * @date 2026/11/25 11:27
  * @param now 浏览器帧时间戳
  */
 function tick(now: number) {
@@ -175,7 +178,10 @@ function tick(now: number) {
     return
   }
   stopFrame()
-  pending = { score: next.score, gifts: next.gifts, troubles: next.troubles }
+  pending = {
+    score: next.score, gifts: next.gifts, troubles: next.troubles,
+    workMessages: next.workMessages, letters: next.letters,
+  }
   void settle()
 }
 
@@ -233,7 +239,7 @@ function setKey(direction: 'left' | 'right', pressed: boolean) {
 /**
  * 原子提交成绩与成就，失败后使用同一成绩重试
  *
- * @date 2026/11/24 16:04
+ * @date 2026/11/25 11:27
  */
 async function settle() {
   if (!pending || !roundId || phase.value === 'saving') {
@@ -248,7 +254,12 @@ async function settle() {
     await props.context.data.saveDraft({ roundId: id, pending: result })
     const commit = await props.context.data.history.settleScoredResult({
       id, runId: props.context.runId, kind: 'catch-gifts', status: 'completed',
-      score: result.score, timeMs: roundMs, details: { gifts: result.gifts, troubles: result.troubles, title: catchTitle(result.score) },
+      score: result.score, timeMs: roundMs, details: {
+        gifts: result.gifts, troubles: result.troubles, title: catchTitle(result.score),
+        // 中途更新时，旧待结算数据没有这两个数量
+        ...(result.workMessages === undefined ? {} : { workMessages: result.workMessages }),
+        ...(result.letters === undefined ? {} : { letters: result.letters }),
+      },
     }, catchAwards(result.score))
     if (disposed) {
       return
